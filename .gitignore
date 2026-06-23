@@ -22,6 +22,7 @@ Desktop.ini
 # Project specific
 state.json
 cache/*.diff
+cache/*_plan.json
 backups/*.pdf
 *.pdf
 

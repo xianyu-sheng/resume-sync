@@ -87,7 +87,8 @@ class Builder:
             return None
         self.backup_dir.mkdir(parents=True, exist_ok=True)
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        backup_name = f"Agent开发简历_{timestamp}.pdf"
+        pdf_stem = Path(self.config["resume"]["pdf_output"]).stem
+        backup_name = f"{pdf_stem}_{timestamp}.pdf"
         backup_path = self.backup_dir / backup_name
         shutil.copy2(pdf_path, backup_path)
         return backup_path
@@ -113,12 +114,16 @@ class Builder:
             result = subprocess.run(
                 cmd,
                 cwd=str(work_dir),
-                capture_output=True,
-                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
                 timeout=300,  # 5 min max for compilation
-                encoding="utf-8",
-                errors="replace",
             )
+            # Decode manually to avoid Python's _readerthread GBK issue on Windows
+            stdout = result.stdout.decode("utf-8", errors="replace") if result.stdout else ""
+            stderr = result.stderr.decode("utf-8", errors="replace") if result.stderr else ""
+            # mock a result-like namespace for compatibility below
+            result.stdout = stdout
+            result.stderr = stderr
         except subprocess.TimeoutExpired:
             return {
                 "success": False,

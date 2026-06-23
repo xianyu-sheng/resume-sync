@@ -80,6 +80,7 @@ class Generator:
    - 每条 1-3 句话，突出量化指标和工程价值
    - 3-5 条 bullets
 4. 如果变更很小（如 typo fix、注释修改、格式化），返回与原内容相同的 bullets，并标记 requires_update: false
+5. **LaTeX 转义**：输出中的特殊字符必须正确转义——下划线写为 \\_（即使在 \\texttt{{}} 内部也如此），& 写为 \\&，% 写为 \\%，$ 写为 \\$，# 写为 \\#，{{ 写为 \\{{，}} 写为 \\}}，~ 写为 \\textasciitilde{{}}
 
 ## 输出格式（严格 JSON）
 ```json

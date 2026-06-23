@@ -259,8 +259,9 @@ class Checker:
                             if individual_diff:
                                 self._cache_diff(key, c["hash"], individual_diff)
 
-            # Update state
-            proj_state["last_commit"] = current_head
+            # Update last check time only — don't advance last_commit yet.
+            # last_commit is only advanced by mark_applied() after the user
+            # confirms and applies the changes to the resume.
             proj_state["last_check_time"] = datetime.now().isoformat()
             self._save_state()
 

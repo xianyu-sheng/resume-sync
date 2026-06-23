@@ -57,8 +57,8 @@ def notify(title: str, body: str) -> bool:
         True if notification was sent successfully.
 
     Usage:
-        notify("🔔 OmniAgent 有更新", "发现 3 个新提交，请运行 resume-sync plan")
-        notify("✅ 简历已编译", "PDF 已保存到 D:\\工作\\Agent开发简历_.pdf")
+        notify("🔔 MyProject 有更新", "发现 3 个新提交，请运行 resume-sync plan")
+        notify("✅ 简历已编译", "PDF 已保存到 /path/to/resume.pdf")
     """
     return _send_toast(title, body)
 
