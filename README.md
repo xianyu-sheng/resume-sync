@@ -286,6 +286,42 @@ resume-sync/
 └── README.md
 ```
 
+### 多角色审查架构（Generate → Review → Revise）
+
+工具的核心生成管线不是单次 LLM 调用，而是模拟 **Proposer-Critique-Judge** 三态协作的多角色对抗管线：
+
+```
+Round 1 ─ Generator（产出者）
+          ↓ 生成初稿
+Round 2 ─ Reviewer（质疑者）
+          ↓ 6 项压力测试逐条打分，揪出虚高/模糊/过程化表述
+          ├── 分数 ≥ 9.0？→ 通过，直接输出
+          └── 分数 < 9.0？→ 进入修订轮次
+Round 3 ─ Reviser（裁决者）
+          ↓ 外科手术式修订：只改有问题的条目，不动已达标内容
+          ↓ 修订后回 Round 2 再次审查
+          ... 直到通过或达到最大轮数
+```
+
+**设计理念**（与 [SmartBench](https://github.com/xianyu-sheng/SmartBench) 的辩论引擎一脉相承）：
+
+| 原则 | 说明 |
+|------|------|
+| **单轮不可靠** | 一次 LLM 输出难以达到大厂简历标准——需要多轮对抗打磨 |
+| **角色分离** | 生成、审查、修订由不同 system prompt 驱动，避免"自己审自己"的盲区 |
+| **量化门禁** | 9.0/10 的硬性 pass_threshold，宁多改一轮不放过一条虚的 |
+| **6 项压力测试** | 量化硬度、叙事弧线、Seniority 信号、对抗性追问、中文质量、LaTeX 合规 |
+| **外科手术式修改** | 审查说第 2 条缺数字 → 只修第 2 条，不推倒整个 list |
+
+轮数可通过 `config.yaml` 配置：
+
+```yaml
+review:
+  enabled: true          # 是否启用多轮审查
+  max_rounds: 3          # 最大审查轮数
+  pass_threshold: 9.0    # 达标分数（1-10，大厂标准建议 ≥ 9.0）
+```
+
 ### 数据流
 
 ```
