@@ -31,7 +31,7 @@ build:
 review:
   enabled: true            # 多轮审查开关
   max_rounds: 3            # 最大审查轮数（生成→审查→修订→审查→...）
-  pass_threshold: 8.0      # 评分达到此值跳过后续轮次（1-10）
+  pass_threshold: 9.0      # 评分达到此值跳过后续轮次（1-10，大厂标准建议 9.0+）
 
 daemon:
   interval_minutes: 30
