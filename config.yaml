@@ -28,6 +28,11 @@ build:
   backup: true
   backup_dir: "D:/工作/resume-sync/backups"
 
+review:
+  enabled: true            # 多轮审查开关
+  max_rounds: 3            # 最大审查轮数（生成→审查→修订→审查→...）
+  pass_threshold: 8.0      # 评分达到此值跳过后续轮次（1-10）
+
 daemon:
   interval_minutes: 30
   auto_apply: false

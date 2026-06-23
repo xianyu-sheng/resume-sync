@@ -129,6 +129,13 @@ def cmd_plan(args):
                 continue
 
             print(f"\n  Summary: {gen_result.get('summary', 'N/A')}")
+
+            review_score = gen_result.get("review_score")
+            review_rounds = gen_result.get("review_rounds", 0)
+            if review_score is not None:
+                stars = "⭐" * min(5, max(1, int(review_score / 2)))
+                print(f"  Review: {stars} {review_score:.1f}/10 after {review_rounds} round(s)")
+
             print(f"\n  Proposed new bullets:")
             for i, bullet in enumerate(gen_result.get("bullets", []), 1):
                 print(f"    {i}. {bullet.strip()[:120]}...")
