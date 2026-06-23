@@ -1,0 +1,34 @@
+# ============================================================
+# Resume-Sync Configuration
+# ============================================================
+
+resume:
+  tex_path: "D:/工作/Agent开发简历_修改版_ (1)/main.tex"
+  pdf_output: "D:/工作/Agent开发简历_.pdf"
+
+projects:
+  - key: omniagent
+    name: "OmniAgent"
+    repo_local: "D:/OmniAgent_CLI"
+    enabled: true
+  - key: smartbench
+    name: "SmartBench"
+    repo_local: "D:/SmartBench"
+    enabled: true
+
+llm:
+  provider: "deepseek"
+  api_key: "${DEEPSEEK_API_KEY}"
+  api_base: "https://api.deepseek.com/v1"
+  model: "deepseek-chat"
+
+build:
+  engine: "latexmk"
+  args: ["-xelatex", "-interaction=nonstopmode"]
+  backup: true
+  backup_dir: "D:/工作/resume-sync/backups"
+
+daemon:
+  interval_minutes: 30
+  auto_apply: false
+  notify_on_change: true
