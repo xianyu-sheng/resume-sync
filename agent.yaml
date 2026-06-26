@@ -1,0 +1,62 @@
+# Agent Manifest — resume-sync 的自描述清单
+# 此文件供 Agent-hub 只读，配置变更请手动编辑。
+
+name: resume-sync
+display_name: 简历同步器
+description: |
+  自动化简历维护工具。检测 Git 项目变更 → LLM 三阶段流水线（生成-审查-修订）
+  生成大厂风格(FAANG)简历要点 → 更新 LaTeX 源文件 → 编译 PDF。
+  支持 Windows 计划任务定时后台运行，主动推送变更通知。
+protocol: cli
+version: "1.0"
+
+capabilities:
+  tasks:
+    - name: check_changes
+      description: 检查指定追踪项目的 Git 新提交和 diff
+      input:
+        project: "string — 项目名（omniagent/smartbench/...）或空=全部"
+      output:
+        project: "string — 项目名"
+        new_commits: "list — 新提交列表"
+        diff: "string — 变更摘要"
+        has_changes: "bool — 是否有变更"
+
+    - name: generate_bullets
+      description: 基于 Git diff 通过 LLM 三阶段流水线生成简历要点（生成→自审→修订，评分阈值 9.0/10）
+      input:
+        project: "string — 项目名"
+        diff: "string — 可选的 diff 文本，不传则自动获取"
+      output:
+        bullets: "list — [{text, score, keywords}]"
+        rounds: "int — 审查轮数"
+
+    - name: apply_and_build
+      description: 将要点按标记块写入 LaTeX 源文件并编译 PDF
+      input:
+        bullets: "list — 要写入的要点（不传则使用缓存的最新 plan）"
+      output:
+        tex_backup: "string — LaTeX 备份路径"
+        pdf_path: "string — 编译后的 PDF 路径"
+        status: "string — 执行状态"
+
+    - name: run_full_pipeline
+      description: 完整自动化流水线：check → plan → apply → build（一键更新简历）
+      input:
+        project: "string — 要检查的项目（可选，默认全部追踪项目）"
+      output:
+        pipeline_status: "dict — 每阶段状态和耗时"
+        pdf_path: "string — 输出 PDF 路径"
+
+    - name: get_status
+      description: 查看所有被追踪项目的状态（上次检查时间、待处理提交数）
+      input: {}
+      output:
+        projects: "list — [{name, last_commit, pending_changes, last_check}]"
+
+  constraints:
+    requires_env: ["DEEPSEEK_API_KEY"]
+    batch_mode_only: true
+
+interface:
+  command: cd D:/工作/resume-sync && python -m src.cli {task} --json-output
