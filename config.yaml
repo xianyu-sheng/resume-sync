@@ -15,6 +15,10 @@ projects:
     name: "SmartBench"
     repo_local: "D:/SmartBench"
     enabled: true
+  - key: agent-hub
+    name: "Agent Hub"
+    repo_local: "D:/Agent-hub"
+    enabled: true
 
 llm:
   provider: "deepseek"
