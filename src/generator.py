@@ -274,6 +274,63 @@ SYSTEM_REVISER = """\
 
 只输出 JSON，不要其他文字。"""
 
+SYSTEM_POLISH = """\
+你是一位资深技术简历润色专家，专精于在不改变技术内容的前提下，\
+大幅提升简历的可读性、信息层级和 HR 扫描效率。
+
+## 你的任务
+
+接收一份现有的简历 bullet list，对其**表达结构**进行优化，\
+使每条 bullet 从"需要仔细读"变成"扫一眼就懂"。\
+**不改变任何技术内容、量化数字、专有名词和 LaTeX 命令。**
+
+## 可读性优化法则
+
+### 法则 1：拆分文字墙（最高优先级）
+- **铁律**：单句不超过 80 个中文字。超过 → 拆成短句，用句号分隔。
+- 如果原 bullet 是一堵 150-300 字的逗号串联长句，拆成 2-3 句。
+- 括号嵌套不超过一层。内层括号内容拆成独立短句。
+
+### 法则 2：信息分层
+- **第一句必须是核心主张**：做了什么、结果如何。HR 扫 2 秒就懂。
+- 支撑细节（技术手段、具体数字、架构名词）放在后续短句中。
+- 如果原 bullet 把结论埋在最后，把它提到最前面。
+
+### 法则 3：子项目信息精简
+- 主项目 bullet 中嵌套的子项目详细指标（如 "SmartBench（12 语言 × 8 LLM 供应商…诊断准确率 92%）"）→ 只保留 1 个关键标签，删掉冗余括号。
+- 子项目的完整指标应在其独立的简历条目中呈现，不要堆在主项目 bullet 里。
+- 反例：`调度 3 个异构 Agent——SmartBench（12 语言 × 8 LLM 供应商的代码诊断引擎，覆盖 13,120 行 C++ 核心代码，诊断准确率 92%）与 resume-sync（Git 变更检测 → LLM 三阶段审查 → LaTeX 编译的简历自动同步器）`
+- 正例：`调度 3 个异构 Agent 协同工作——包括 SmartBench 代码诊断引擎与 resume-sync 简历自动同步器。设计三层调度架构：Agent Manifest 发现层 → LLM 意图路由层 → DAG 并行执行层。`
+
+### 法则 4：保留一切技术信号
+- **绝对禁止**删除或弱化：量化数字、技术名词、架构描述、性能指标。
+- **绝对禁止**把"自研基于 io_uring 的异步 I/O 引擎"缩成"做了异步 I/O 优化"。
+- 只改变表达结构（拆句、调序、去冗余括号），不改变信息内容。
+
+### 法则 5：保持 LaTeX 安全
+- 所有 \\texttt、\\textbf、\\% 等 LaTeX 命令保持原样不动。
+- 如果原有转义正确，不要改动。
+- 如果拆句需要新增 LaTeX 转义，照常处理。
+
+### 法则 6：保持 bullet 结构
+- 每条 bullet 必须以 `\\\\item \\\\textbf{{标题：}}` 开头。
+- 标题不变——只改标题后面的描述部分。
+- 输出与输入相同的 bullet 数量（不增删条目）。
+
+## 输出格式（严格 JSON）
+```json
+{{
+  "bullets": [
+    "\\\\item \\\\textbf{{标题：}} 重构后的描述...",
+    "\\\\item \\\\textbf{{标题：}} 重构后的描述..."
+  ],
+  "summary": "一句话概括做了哪些可读性优化",
+  "requires_update": true
+}}
+```
+
+只输出 JSON，不要其他文字。"""
+
 
 # ── Generator class ──────────────────────────────────────────
 
@@ -681,3 +738,151 @@ class Generator:
         """Return the Round-1 prompt without calling LLM (for debugging)."""
         result = self.generate(project_key, diff, tex_path, repo_path, dry_run=True)
         return result.get("prompt", "")
+
+    # ── Polish (readability-only rewrite, no diff needed) ──────
+
+    def _build_polish_prompt(self, project_name: str,
+                             current_bullets: str) -> str:
+        """Build the polish prompt — improve readability without new content."""
+        return f"""请优化以下 "{project_name}" 项目简历 bullet list 的可读性和信息层级。
+
+## 当前 bullets
+{current_bullets}
+
+## 要求
+1. **只改表达结构，不改技术内容**。所有数字、名词、性能指标必须原样保留。
+2. 重点处理：
+   - 单句 > 80 字的逗号串联长句 → 拆成短句（用句号）
+   - 括号嵌套 > 1 层 → 拆成独立短句
+   - 核心主张埋在句末 → 提到句首
+   - 主项目 bullet 堆了子项目详细指标 → 精简为 1 个标签
+3. 输出与输入相同数量的 bullets（{len([b for b in current_bullets.strip().split(chr(10)) if b.strip()])} 条）
+4. 所有 LaTeX 命令和转义保持正确
+
+## 输出格式（严格 JSON）
+```json
+{{
+  "bullets": [
+    "\\\\item \\\\textbf{{标题：}} 重构后的描述...",
+    "\\\\item \\\\textbf{{标题：}} 重构后的描述..."
+  ],
+  "summary": "一句话概括可读性优化",
+  "requires_update": true
+}}
+```
+
+只输出 JSON，不要其他文字。"""
+
+    def polish(self, project_key: str, tex_path: str,
+               dry_run: bool = False) -> dict:
+        """Rewrite existing bullets for readability without requiring new commits.
+
+        Uses SYSTEM_POLISH to restructure bullet text (split walls of text,
+        flatten nested parentheses, front-load key claims) while preserving
+        all technical content, numbers, and LaTeX commands.
+
+        Returns the same structure as :meth:`generate`.
+        """
+        project_name = project_key
+        for proj in self.config.get("projects", []):
+            if proj["key"] == project_key:
+                project_name = proj.get("name", project_key)
+                break
+
+        current_bullets = self._read_current_bullets(tex_path, project_key)
+        if not current_bullets.strip():
+            return {
+                "bullets": [], "summary": "", "requires_update": False,
+                "review_score": None, "review_rounds": 0,
+                "prompt": "", "error": f"No existing bullets found for {project_key}",
+            }
+
+        polish_prompt = self._build_polish_prompt(project_name, current_bullets)
+
+        if dry_run:
+            return {
+                "bullets": [], "summary": "", "requires_update": False,
+                "review_score": None, "review_rounds": 0,
+                "prompt": polish_prompt, "error": None,
+            }
+
+        # ── Round 1: Polish ────────────────────────────────────
+        try:
+            content = self._call_llm(SYSTEM_POLISH, polish_prompt,
+                                     temperature=0.3, max_tokens=4000)
+            result = self._parse_response(content)
+        except Exception as e:
+            return {
+                "bullets": [], "summary": "", "requires_update": False,
+                "review_score": None, "review_rounds": 0,
+                "prompt": polish_prompt, "error": str(e),
+            }
+
+        bullets = result.get("bullets", [])
+        if not bullets:
+            return {
+                "bullets": [], "summary": "No bullets returned",
+                "requires_update": False,
+                "review_score": None, "review_rounds": 1,
+                "prompt": polish_prompt, "error": None,
+            }
+
+        # ── Multi-round review ──────────────────────────────────
+        if not self.review_enabled:
+            result["review_score"] = None
+            result["review_rounds"] = 1
+            result["prompt"] = polish_prompt
+            result["error"] = None
+            return result
+
+        review_score = None
+        rounds_completed = 1
+
+        for round_num in range(2, self.max_rounds + 1):
+            review_prompt = self._build_review_prompt(
+                bullets, project_name, diff="(readability polish — no code changes)")
+            try:
+                review_content = self._call_llm(
+                    SYSTEM_REVIEWER, review_prompt,
+                    temperature=0.2, max_tokens=3000)
+                review = self._parse_response(review_content)
+            except Exception:
+                break
+
+            review_score = review.get("overall_score", 0)
+            dim_scores = review.get("dimension_scores", {})
+
+            all_dims_ok = all(
+                (isinstance(v, (int, float)) and v >= 5.0)
+                for v in dim_scores.values()
+            ) if dim_scores else True
+
+            if (review.get("ready", False)
+                    and isinstance(review_score, (int, float))
+                    and review_score >= self.pass_threshold
+                    and all_dims_ok):
+                rounds_completed = round_num - 1
+                break
+
+            critique_text = json.dumps(review, ensure_ascii=False, indent=2)
+            revise_prompt = self._build_revise_prompt(
+                bullets, critique_text, project_name,
+                diff="(readability polish — no code changes)")
+            try:
+                revise_content = self._call_llm(
+                    SYSTEM_REVISER, revise_prompt,
+                    temperature=0.3, max_tokens=4000)
+                revised = self._parse_response(revise_content)
+                bullets = revised.get("bullets", bullets)
+                result = revised
+            except Exception:
+                break
+
+            rounds_completed = round_num
+
+        result["bullets"] = bullets
+        result["review_score"] = review_score
+        result["review_rounds"] = rounds_completed
+        result["prompt"] = polish_prompt
+        result["error"] = None
+        return result
