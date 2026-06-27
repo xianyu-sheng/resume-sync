@@ -235,29 +235,17 @@ class Checker:
                 }
                 continue
 
-            # Extract diff (use cache if available)
-            diff = None
-            diff_stat = None
+            # Extract diff — always get full diff from last_commit..HEAD
+            diff = self._get_diff(repo_path, last_commit)
+            diff_stat = self._get_diff_stat(repo_path, last_commit)
+
+            # Cache individual commit diffs for future display (best-effort)
             for commit in new_commits:
                 cached = self._read_cached_diff(key, commit["hash"])
-                if cached is not None:
-                    if diff is None:
-                        diff = cached
-                    else:
-                        diff += "\n\n" + cached
-                    if diff_stat is None:
-                        diff_stat = ""
-                    diff_stat += f"\n[{commit['hash'][:8]}] {commit['message']} (cached)"
-                else:
-                    # Get full diff from last_commit to HEAD
-                    if diff is None:
-                        diff = self._get_diff(repo_path, last_commit)
-                        diff_stat = self._get_diff_stat(repo_path, last_commit)
-                        # Cache the per-commit diff
-                        for c in new_commits:
-                            individual_diff = self._get_diff(repo_path, f"{c['hash']}^")
-                            if individual_diff:
-                                self._cache_diff(key, c["hash"], individual_diff)
+                if cached is None:
+                    individual_diff = self._get_diff(repo_path, f"{commit['hash']}^")
+                    if individual_diff:
+                        self._cache_diff(key, commit["hash"], individual_diff)
 
             # Update last check time only — don't advance last_commit yet.
             # last_commit is only advanced by mark_applied() after the user
