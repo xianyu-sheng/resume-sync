@@ -61,4 +61,4 @@ capabilities:
     batch_mode_only: true
 
 interface:
-  command: cd D:/工作/resume-sync && python -m src.cli {task} --json-output
+  command: cd D:/工作/resume-sync && python -m src.cli {task}
