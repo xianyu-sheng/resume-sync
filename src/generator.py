@@ -598,6 +598,28 @@ class Generator:
 
 只输出 JSON，不要其他文字。"""
 
+    def _build_polish_review_prompt(self, bullets: list[str], project_name: str) -> str:
+        """Build the review prompt for polish mode — no code diff, focus on readability."""
+        return f"""请审查以下 "{project_name}" 项目简历 bullet list 的**可读性**。
+
+## 待审查的 bullets
+{self._format_bullets_display(bullets)}
+
+## ⚠️ 重要：本次为「可读性专项优化」，无代码变更
+
+不需要检查技术深度、量化硬度等维度。只审查以下 4 个可读性维度：
+
+1. **文字墙检测** — 是否有单句 > 80 中文字且只用逗号串联？→ 有则 ≤ 4 分
+2. **括号嵌套** — 是否有括号内还有括号？→ 有则 ≤ 5 分
+3. **可扫描性** — 第一句是否给出核心主张？HR 扫 2 秒能懂吗？
+4. **信息冗余** — 主项目 bullet 是否堆了子项目的详细指标（应移到独立条目）？
+
+**门禁规则**：
+- 4 个维度全部 ≥ 6 分 → ready: true
+- 任一维度 < 6 分 → 对应 bullet 必须进入 must_fix
+
+只输出 JSON（包含 dimension_scores、per_bullet、must_fix、ready），不要其他文字。"""
+
     # ── public API ────────────────────────────────────────────
 
     def generate(self, project_key: str, diff: str,
@@ -744,6 +766,12 @@ class Generator:
     def _build_polish_prompt(self, project_name: str,
                              current_bullets: str) -> str:
         """Build the polish prompt — improve readability without new content."""
+        # Count actual bullet entries (not lines — a bullet can span multiple lines)
+        # Use chr(92) for backslash to avoid Python 3.14 "invalid escape \i" error
+        _bs = chr(92)  # backslash
+        bullet_count = len(re.findall(_bs + _bs + 'item' + _bs + 's', current_bullets))
+        if bullet_count == 0:
+            bullet_count = len([l for l in current_bullets.splitlines() if l.strip()])
         return f"""请优化以下 "{project_name}" 项目简历 bullet list 的可读性和信息层级。
 
 ## 当前 bullets
@@ -756,7 +784,7 @@ class Generator:
    - 括号嵌套 > 1 层 → 拆成独立短句
    - 核心主张埋在句末 → 提到句首
    - 主项目 bullet 堆了子项目详细指标 → 精简为 1 个标签
-3. 输出与输入相同数量的 bullets（{len([b for b in current_bullets.strip().split(chr(10)) if b.strip()])} 条）
+3. 输出与输入相同数量的 bullets（{bullet_count} 条），不要合并或拆分条目
 4. 所有 LaTeX 命令和转义保持正确
 
 ## 输出格式（严格 JSON）
@@ -839,8 +867,7 @@ class Generator:
         rounds_completed = 1
 
         for round_num in range(2, self.max_rounds + 1):
-            review_prompt = self._build_review_prompt(
-                bullets, project_name, diff="(readability polish — no code changes)")
+            review_prompt = self._build_polish_review_prompt(bullets, project_name)
             try:
                 review_content = self._call_llm(
                     SYSTEM_REVIEWER, review_prompt,
@@ -865,9 +892,35 @@ class Generator:
                 break
 
             critique_text = json.dumps(review, ensure_ascii=False, indent=2)
-            revise_prompt = self._build_revise_prompt(
-                bullets, critique_text, project_name,
-                diff="(readability polish — no code changes)")
+            # Use a revise prompt tailored for polish — no code diff reference
+            revise_prompt = f"""请根据以下审查意见，修订 "{project_name}" 项目的简历 bullet list。
+
+## 当前 bullets
+{self._format_bullets_display(bullets)}
+
+## 审查意见
+{critique_text}
+
+## ⚠️ 注意：本次为可读性专项优化，无代码变更。只改表达结构。
+
+## 修订要求
+1. 逐条落实审查意见中的改进建议
+2. 保持原有的技术亮点不被稀释
+3. 确保所有 LaTeX 特殊字符正确转义
+4. 输出**完整**的 bullet list（不是只输出修改的条目）
+
+## 输出格式（严格 JSON）
+```json
+{{
+  "bullets": [
+    "\\\\item \\\\textbf{{标题：}} 描述内容...",
+    "\\\\item \\\\textbf{{标题：}} 描述内容..."
+  ],
+  "summary": "一句话概括修订内容",
+  "requires_update": true
+}}
+```
+只输出 JSON，不要其他文字。"""
             try:
                 revise_content = self._call_llm(
                     SYSTEM_REVISER, revise_prompt,

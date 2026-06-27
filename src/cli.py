@@ -384,10 +384,28 @@ def cmd_run(args):
 
     # ── Phase 2: Polish readability for ALL enabled projects ─────
     # (runs even when there are no new commits — keeps bullets crisp)
+    # Skip if bullets haven't changed since last polish (hash check)
+    import hashlib
+    polish_state_file = PROJECT_ROOT / "cache" / "_polish_state.json"
+    polish_state = {}
+    if polish_state_file.exists():
+        try:
+            polish_state = json.loads(polish_state_file.read_text(encoding="utf-8"))
+        except Exception:
+            pass
+
     print("\n--- Polishing readability ---")
     for proj in checker.config.get("projects", []):
         key = proj["key"]
         if not proj.get("enabled", True):
+            continue
+
+        # Check if bullets changed since last polish
+        current_raw = generator._read_current_bullets(tex_path, key)
+        current_hash = hashlib.sha256(current_raw.encode()).hexdigest()
+        last_hash = polish_state.get(key)
+        if last_hash == current_hash:
+            print(f"[{key}] ✅ Already polished — skipping (no bullet changes since last run).")
             continue
 
         print(f"\n[{key}] Checking readability...")
@@ -419,10 +437,18 @@ def cmd_run(args):
             apply_result = updater.apply(key, bullets)
             if apply_result.get("success"):
                 print(f"[{key}] ✅ Polished. Backup: {apply_result['backup_path']}")
+                # Update hash so we don't re-polish until bullets change again
+                polish_state[key] = current_hash
             else:
                 print(f"[{key}] ❌ {apply_result['error']}")
         else:
             print(f"[{key}] Already well-structured — no changes needed.")
+            # Still record hash to avoid re-checking unchanged bullets
+            polish_state[key] = current_hash
+
+    # Persist polish state
+    polish_state_file.parent.mkdir(parents=True, exist_ok=True)
+    polish_state_file.write_text(json.dumps(polish_state, indent=2, ensure_ascii=False), encoding="utf-8")
 
     # Build
     print("\n--- Compiling PDF ---")
