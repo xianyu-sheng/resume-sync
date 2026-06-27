@@ -77,6 +77,13 @@ HR 不会"读"简历——他们**扫**简历。一条 bullet 如果是一堵 25
   - ✅ 拆为：先给出核心主张（调度了 N 个 Agent、用什么架构），再分号简述每个 Agent 的 1 个关键指标即可。子 Agent 的详细指标放到各自的独立条目中。
 - **"一屏法则"**: 5 条 bullets 加起来，在简历 PDF 上不超过 12 行。如果超过，说明信息密度不足——删废话、合重复、缩修饰。
 
+### 洞悉九：克制 > 堆砌
+- 每条 bullet 的目标不是"展示你做过的一切"，而是"让 HR 在 3 秒内产生面试兴趣"。
+- 3 条有冲击力的 bullet > 6 条流水账 bullet——因为 HR 只会扫前 3 条。
+- 如果你发现有 2 条 bullet 在说同一件事（如都在描述调度架构的不同侧面），合并为 1 条精炼的。
+- 每个项目的 bullet 建议 3-5 条。超过 5 条说明你在记流水账，不是在写简历。
+- 数字不是越多越好——一条 bullet 里塞 3 个量化数字，HR 一个都记不住。精选最强的 1-2 个。
+
 只输出 JSON，不要其他文字。"""
 
 SYSTEM_REVIEWER = """\
@@ -286,6 +293,14 @@ SYSTEM_POLISH = """\
 
 ## 可读性优化法则
 
+### 法则 0：信息优先级裁剪（最高优先级——先裁后拆）
+- 每条 bullet 只能承载 **1 个核心主张 + 最多 2 个支撑数据点**。
+- 如果一条 bullet 包含 3 个以上量化数字，只保留区分度最高的 1-2 个，其余裁掉。
+- **拆分铁律**：拆分后每条 bullet 必须 ≥ 2 句话且至少包含 1 个量化数字。如果拆分后某条只有 1 句空话（如「量化成果：成功率从 40% 提升至 85%」）→ **禁止拆分**，将量化数字合并回架构描述中。
+- **优先合并不优先拆**：如果 2 条相邻 bullet 在说同一件事的不同侧面（如「写入前检查点机制」和「工业级可靠性保障」都在描述可靠性），合并为 1 条精炼的 bullet。
+- **bullet 数量目标 4-6 条**。少于 4 条说明信息可能丢失，多于 6 条说明记流水账——裁掉最弱的那条。
+- 裁剪不是删除——被裁掉的技术细节如果有价值，可以移到相邻 bullet 中作为辅助信息。
+
 ### 法则 1：拆分文字墙（最高优先级）
 - **铁律**：单句不超过 80 个中文字。超过 → 拆成短句，用句号分隔。
 - 如果原 bullet 是一堵 150-300 字的逗号串联长句，拆成 2-3 句。
@@ -328,6 +343,32 @@ SYSTEM_POLISH = """\
   "requires_update": true
 }}
 ```
+
+只输出 JSON，不要其他文字。"""
+
+SYSTEM_POLISH_REVIEWER = """\
+你是一位简历可读性审查专家，专精于判断简历 bullet 是否"扫一眼就懂"。\
+你的审查领域**仅限于可读性**，不涉及技术深度、量化硬度等维度。
+
+## 评分锚定（仅针对可读性）
+
+- **9.0-10**：每条 bullet 第一句即核心主张，单句 ≤ 60 中文字，每 bullet ≤ 2 个数字。HR 扫 2 秒即懂，零文字墙。
+- **8.5-8.9**：几乎所有 bullet 符合上述标准，个别 bullet 可再微调但已可交付。
+- **7.0-8.4**：部分 bullet 仍偏长（单句 > 80 字）或信息密度过高（> 3 个数字），需继续精简。
+- **6.0-6.9**：明显文字墙未消除或括号嵌套过深，多条 bullet 第一句未给出核心主张。
+- **<6.0**：不可交付。存在大段逗号串联或严重括号嵌套。
+
+## 五个审查维度（每维 1-10 分）
+
+1. **文字墙检测**：存在单句 > 80 中文字且逗号串联 → ≤ 4 分
+2. **括号嵌套**：括号内有括号 → ≤ 5 分
+3. **可扫描性**：第一句是否给出核心主张？HR 扫 2 秒能懂？
+4. **信息冗余**：主项目 bullet 堆了子项目详细指标？
+5. **信息密度控制**：任一条 bullet 超过 2 个量化数字？技术名词堆积导致扫读困难？
+
+**门禁规则**：
+- 5 个维度全部 ≥ 8.5 分 → ready: true
+- 任一维度 < 8.5 分 → 对应 bullet 标记 must_fix
 
 只输出 JSON，不要其他文字。"""
 
@@ -607,16 +648,17 @@ class Generator:
 
 ## ⚠️ 重要：本次为「可读性专项优化」，无代码变更
 
-不需要检查技术深度、量化硬度等维度。只审查以下 4 个可读性维度：
+不需要检查技术深度、量化硬度等维度。只审查以下 5 个可读性维度：
 
 1. **文字墙检测** — 是否有单句 > 80 中文字且只用逗号串联？→ 有则 ≤ 4 分
 2. **括号嵌套** — 是否有括号内还有括号？→ 有则 ≤ 5 分
 3. **可扫描性** — 第一句是否给出核心主张？HR 扫 2 秒能懂吗？
 4. **信息冗余** — 主项目 bullet 是否堆了子项目的详细指标（应移到独立条目）？
+5. **信息密度控制** — 任一条 bullet 是否承载了超过 2 个量化数字？整条 bullet 是否塞入过多技术名词导致扫读困难？→ 超过 2 个量化数字则 ≤ 5 分
 
 **门禁规则**：
-- 4 个维度全部 ≥ 6 分 → ready: true
-- 任一维度 < 6 分 → 对应 bullet 必须进入 must_fix
+- 5 个维度全部 ≥ 8.5 分 → ready: true
+- 任一维度 < 8.5 分 → 对应 bullet 必须进入 must_fix
 
 只输出 JSON（包含 dimension_scores、per_bullet、must_fix、ready），不要其他文字。"""
 
@@ -784,7 +826,7 @@ class Generator:
    - 括号嵌套 > 1 层 → 拆成独立短句
    - 核心主张埋在句末 → 提到句首
    - 主项目 bullet 堆了子项目详细指标 → 精简为 1 个标签
-3. 输出与输入相同数量的 bullets（{bullet_count} 条），不要合并或拆分条目
+3. 输出 4-6 条 bullets（当前为 {bullet_count} 条）。拆分后每条 bullet 必须 ≥ 2 句话 + 至少 1 个量化数字，否则禁止拆分。
 4. 所有 LaTeX 命令和转义保持正确
 
 ## 输出格式（严格 JSON）
@@ -870,7 +912,7 @@ class Generator:
             review_prompt = self._build_polish_review_prompt(bullets, project_name)
             try:
                 review_content = self._call_llm(
-                    SYSTEM_REVIEWER, review_prompt,
+                    SYSTEM_POLISH_REVIEWER, review_prompt,
                     temperature=0.2, max_tokens=3000)
                 review = self._parse_response(review_content)
             except Exception:
@@ -884,9 +926,12 @@ class Generator:
                 for v in dim_scores.values()
             ) if dim_scores else True
 
+            # Polish uses 5 readability dimensions (vs 10 FAANG dimensions).
+            # Use 9.0 to enforce high readability standards.
+            polish_threshold = 9.0
             if (review.get("ready", False)
                     and isinstance(review_score, (int, float))
-                    and review_score >= self.pass_threshold
+                    and review_score >= polish_threshold
                     and all_dims_ok):
                 rounds_completed = round_num - 1
                 break
