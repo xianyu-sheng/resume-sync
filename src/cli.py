@@ -7,10 +7,13 @@ Usage:
     python -m src.cli plan               # Generate update suggestions
     python -m src.cli plan omniagent     # Generate for specific project
     python -m src.cli plan --dry-run     # Print prompts without calling LLM
+    python -m src.cli polish             # Rewrite bullets for readability (no new commits needed)
+    python -m src.cli polish agent-hub   # Polish specific project
+    python -m src.cli polish --apply     # Polish and auto-apply
     python -m src.cli apply              # Apply updates (interactive confirm)
     python -m src.cli apply --yes        # Skip confirmation
     python -m src.cli build              # Compile PDF
-    python -m src.cli run                # Full pipeline: check → plan → apply → build
+    python -m src.cli run                # Full pipeline: check → plan|polish → apply → build
     python -m src.cli daemon             # Single check + notify cycle
     python -m src.cli install            # Install Windows scheduled task
     python -m src.cli uninstall          # Remove Windows scheduled task
@@ -173,6 +176,81 @@ def _load_plan(project_key: str) -> dict | None:
     return None
 
 
+def cmd_polish(args):
+    """Rewrite existing bullets for readability without requiring new commits."""
+    import yaml
+    with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+        config = yaml.safe_load(f)
+
+    generator = Generator(config_path=CONFIG_PATH)
+    tex_path = config["resume"]["tex_path"]
+    skip_confirm = args.yes if hasattr(args, 'yes') else False
+    project = args.project if hasattr(args, 'project') else None
+
+    targets = []
+    for proj in config.get("projects", []):
+        key = proj["key"]
+        if not proj.get("enabled", True):
+            continue
+        if project and key != project:
+            continue
+        targets.append(key)
+
+    if not targets:
+        print("No enabled projects found.")
+        return
+
+    for key in targets:
+        print(f"\n{'='*60}")
+        print(f"[{key}] Polishing readability...")
+        print(f"{'='*60}")
+
+        result = generator.polish(key, tex_path)
+
+        if result.get("error"):
+            print(f"❌ LLM error: {result['error']}")
+            continue
+
+        print(f"\n  Summary: {result.get('summary', 'N/A')}")
+
+        review_score = result.get("review_score")
+        review_rounds = result.get("review_rounds", 0)
+        if review_score is not None:
+            stars = "⭐" * min(5, max(1, int(review_score / 2)))
+            print(f"  Review: {stars} {review_score:.1f}/10 after {review_rounds} round(s)")
+
+        bullets = result.get("bullets", [])
+        if not bullets:
+            print("  No bullets returned — skipping.")
+            continue
+
+        print(f"\n  Polished bullets:")
+        for i, bullet in enumerate(bullets, 1):
+            print(f"    {i}. {bullet.strip()[:120]}...")
+
+        # Show diff
+        updater = Updater(tex_path)
+        preview = updater.preview(key, bullets)
+        if preview.get("error"):
+            print(f"\n  ❌ Preview error: {preview['error']}")
+            continue
+
+        print(f"\n  --- Diff ---")
+        for line in preview["diff"].split("\n")[:50]:
+            print(f"  {line}")
+
+        # Save plan for apply
+        _save_plan(key, result)
+        print(f"\n  Plan saved. Run 'python -m src.cli apply' to apply.")
+
+        if skip_confirm:
+            apply_result = updater.apply(key, bullets)
+            if apply_result.get("success"):
+                print(f"  ✅ Applied! Backup: {apply_result['backup_path']}")
+            else:
+                print(f"  ❌ Failed: {apply_result['error']}")
+
+
 def cmd_apply(args):
     """Apply generated plan to main.tex."""
     import yaml
@@ -251,60 +329,100 @@ def cmd_build(args):
 
 
 def cmd_run(args):
-    """Full pipeline: check → plan → apply → build."""
+    """Full pipeline: check → plan+polish → apply → build."""
     # Run check
     checker = Checker(config_path=CONFIG_PATH)
     results = checker.check()
-
-    any_changes = any(r.get("has_changes") for r in results.values())
-    if not any_changes:
-        print("No changes detected across all projects. Exiting.")
-        return
-
-    # Run plan
-    print("\n--- Generating update plans ---")
     generator = Generator(config_path=CONFIG_PATH)
     tex_path = checker.config["resume"]["tex_path"]
 
-    for key, result in results.items():
-        if not result.get("has_changes"):
+    any_changes = any(r.get("has_changes") for r in results.values())
+
+    if any_changes:
+        # ── Phase 1: Plan for projects with new commits ──────────
+        print("\n--- Generating update plans ---")
+        for key, result in results.items():
+            if not result.get("has_changes"):
+                continue
+
+            repo_path = ""
+            for proj in checker.config.get("projects", []):
+                if proj["key"] == key:
+                    repo_path = proj["repo_local"]
+                    break
+
+            gen_result = generator.generate(key, result["diff"], tex_path, repo_path)
+            if gen_result.get("error"):
+                print(f"[{key}] LLM error: {gen_result['error']}")
+                continue
+            if not gen_result.get("requires_update"):
+                print(f"[{key}] No resume update needed from code changes.")
+                _save_plan(key, gen_result)
+                continue
+
+            _save_plan(key, gen_result)
+            print(f"[{key}] Plan generated: {gen_result.get('summary', '')}")
+
+            # Apply
+            updater = Updater(tex_path)
+            bullets = gen_result.get("bullets", [])
+            preview = updater.preview(key, bullets)
+            if preview.get("error"):
+                print(f"[{key}] Preview error: {preview['error']}")
+                continue
+
+            print(f"\n[{key}] Diff:")
+            for line in preview["diff"].split("\n")[:20]:
+                print(f"  {line}")
+
+            apply_result = updater.apply(key, bullets)
+            if apply_result.get("success"):
+                print(f"[{key}] ✅ Applied. Backup: {apply_result['backup_path']}")
+                checker.mark_applied(key)
+            else:
+                print(f"[{key}] ❌ {apply_result['error']}")
+
+    # ── Phase 2: Polish readability for ALL enabled projects ─────
+    # (runs even when there are no new commits — keeps bullets crisp)
+    print("\n--- Polishing readability ---")
+    for proj in checker.config.get("projects", []):
+        key = proj["key"]
+        if not proj.get("enabled", True):
             continue
 
-        repo_path = ""
-        for proj in checker.config.get("projects", []):
-            if proj["key"] == key:
-                repo_path = proj["repo_local"]
-                break
+        print(f"\n[{key}] Checking readability...")
+        polish_result = generator.polish(key, tex_path)
 
-        gen_result = generator.generate(key, result["diff"], tex_path, repo_path)
-        if gen_result.get("error"):
-            print(f"[{key}] LLM error: {gen_result['error']}")
-            continue
-        if not gen_result.get("requires_update"):
-            print(f"[{key}] No resume update needed.")
+        if polish_result.get("error"):
+            print(f"[{key}] Polish error: {polish_result['error']}")
             continue
 
-        _save_plan(key, gen_result)
-        print(f"[{key}] Plan generated: {gen_result.get('summary', '')}")
+        bullets = polish_result.get("bullets", [])
+        if not bullets:
+            print(f"[{key}] No bullets returned — skipping.")
+            continue
 
-        # Apply
+        review_score = polish_result.get("review_score")
+        rounds = polish_result.get("review_rounds", 0)
+        stars = "⭐" * min(5, max(1, int((review_score or 7) / 2)))
+        print(f"[{key}] {stars} {review_score:.1f}/10 after {rounds} round(s): {polish_result.get('summary', '')}")
+
+        # Only show diff if it actually changed
         updater = Updater(tex_path)
-        bullets = gen_result.get("bullets", [])
         preview = updater.preview(key, bullets)
-        if preview.get("error"):
-            print(f"[{key}] Preview error: {preview['error']}")
-            continue
+        if preview.get("diff"):
+            print(f"\n[{key}] Readability diff:")
+            for line in preview["diff"].split("\n")[:30]:
+                print(f"  {line}")
 
-        print(f"\n[{key}] Diff:")
-        for line in preview["diff"].split("\n")[:20]:
-            print(f"  {line}")
-
-        apply_result = updater.apply(key, bullets)
-        if apply_result.get("success"):
-            print(f"[{key}] ✅ Applied. Backup: {apply_result['backup_path']}")
-            checker.mark_applied(key)
+            # Auto-apply polish (always yes — it only changes structure, not content)
+            apply_result = updater.apply(key, bullets)
+            if apply_result.get("success"):
+                print(f"[{key}] ✅ Polished. Backup: {apply_result['backup_path']}")
+            else:
+                print(f"[{key}] ❌ {apply_result['error']}")
         else:
-            print(f"[{key}] ❌ {apply_result['error']}")
+            print(f"[{key}] Already well-structured — no changes needed.")
 
     # Build
     print("\n--- Compiling PDF ---")
@@ -406,6 +524,12 @@ Examples:
     p_plan.add_argument("--dry-run", action="store_true",
                         help="Print prompt without calling LLM")
 
+    # polish
+    p_polish = sub.add_parser("polish", help="Rewrite bullets for readability (no new commits needed)")
+    p_polish.add_argument("project", nargs="?", help="Project key to polish (optional)")
+    p_polish.add_argument("--apply", dest="yes", action="store_true",
+                          help="Auto-apply without confirmation")
+
     # apply
     p_apply = sub.add_parser("apply", help="Apply pending updates to resume")
     p_apply.add_argument("--yes", action="store_true",
@@ -436,6 +560,7 @@ Examples:
     handlers = {
         "check": cmd_check,
         "plan": cmd_plan,
+        "polish": cmd_polish,
         "apply": cmd_apply,
         "build": cmd_build,
         "run": cmd_run,
