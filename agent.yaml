@@ -12,47 +12,49 @@ version: "1.0"
 
 capabilities:
   tasks:
-    - name: check_changes
-      description: 检查指定追踪项目的 Git 新提交和 diff
+    - name: check
+      description: 检查所有追踪项目的 Git 新提交和变更（如：检查 omniagent/smartbench 是否有新代码需要更新简历）
       input:
-        project: "string — 项目名（omniagent/smartbench/...）或空=全部"
+        project: "string — 项目名（可选，不传则检查全部追踪项目）"
       output:
-        project: "string — 项目名"
-        new_commits: "list — 新提交列表"
-        diff: "string — 变更摘要"
-        has_changes: "bool — 是否有变更"
+        commits: "list"
+        diff: "string"
+        has_changes: "bool"
 
-    - name: generate_bullets
+    - name: plan
       description: 基于 Git diff 通过 LLM 三阶段流水线生成简历要点（生成→自审→修订，评分阈值 9.0/10）
       input:
-        project: "string — 项目名"
-        diff: "string — 可选的 diff 文本，不传则自动获取"
+        project: "string — 要生成要点的项目名"
       output:
         bullets: "list — [{text, score, keywords}]"
-        rounds: "int — 审查轮数"
 
-    - name: apply_and_build
-      description: 将要点按标记块写入 LaTeX 源文件并编译 PDF
+    - name: apply
+      description: 将已生成的简历要点写入 LaTeX 源文件（不传 bullets 则使用缓存的最新 plan 结果）
       input:
-        bullets: "list — 要写入的要点（不传则使用缓存的最新 plan）"
+        bullets: "list — 要点列表（可选）"
       output:
-        tex_backup: "string — LaTeX 备份路径"
-        pdf_path: "string — 编译后的 PDF 路径"
-        status: "string — 执行状态"
+        tex_backup: "string"
+        status: "string"
 
-    - name: run_full_pipeline
-      description: 完整自动化流水线：check → plan → apply → build（一键更新简历）
+    - name: build
+      description: 编译 LaTeX 源文件生成最终的 PDF 简历
+      input: {}
+      output:
+        pdf_path: "string — 编译后的 PDF 路径"
+
+    - name: run
+      description: 完整自动化流水线：check → plan → apply → build（一键更新简历，如"帮我更新简历"或"同步最新代码到简历"）
       input:
         project: "string — 要检查的项目（可选，默认全部追踪项目）"
       output:
-        pipeline_status: "dict — 每阶段状态和耗时"
+        pipeline_status: "dict"
         pdf_path: "string — 输出 PDF 路径"
 
-    - name: get_status
-      description: 查看所有被追踪项目的状态（上次检查时间、待处理提交数）
+    - name: status
+      description: 查看所有被追踪项目的当前状态（上次检查时间、是否有待处理变更）
       input: {}
       output:
-        projects: "list — [{name, last_commit, pending_changes, last_check}]"
+        projects: "list — [{name, last_commit, pending_changes}]"
 
   constraints:
     requires_env: ["DEEPSEEK_API_KEY"]
