@@ -280,7 +280,7 @@ resume-sync/
 │   ├── __init__.py
 │   ├── cli.py               # CLI 主入口（argparse 子命令）
 │   ├── checker.py           # Git 变更检测 + 状态管理 + 缓存
-│   ├── generator.py         # LLM 简历描述生成（OpenAI 兼容接口）
+│   ├── generator.py         # LLM 简历描述生成（OpenAI 兼容接口 + 调度关系感知）
 │   ├── updater.py           # LaTeX 标记块解析与替换
 │   ├── builder.py           # latexmk 编译 + PDF 输出 + 错误处理
 │   ├── notifier.py          # Windows Toast 原生通知
@@ -329,6 +329,8 @@ review:
 ```
 config.yaml ──→ checker.py ──→ state.json
                     ↓
+              agent.yaml ──→ 发现 scheduled_agents（调度关系）
+                    ↓
               generator.py ──→ LLM API（DeepSeek / OpenAI 兼容）
                     ↓
               updater.py  ──→ main.tex（带标记注释的 LaTeX 源码）
@@ -337,6 +339,58 @@ config.yaml ──→ checker.py ──→ state.json
                     ↓
               notifier.py ──→ Windows Toast 桌面通知
 ```
+
+### 调度关系感知（Hierarchy-Aware Generation）
+
+当追踪的项目是一个**调度/编排系统**（如 Agent Hub）时，resume-sync 会自动读取该项目的 `agent.yaml`，发现其中声明的 `scheduled_agents` 字段，并在 LLM 生成 prompt 中注入子项目关系上下文。
+
+**效果对比**：
+
+| 无调度关系感知 | 有调度关系感知 |
+|----------------|----------------|
+| "开发了 Agent Hub，一个多 Agent 调度系统" | "设计了一套多 Agent 协同调度框架（Agent Manifest 协议 + LLM 意图路由 + DAG 并行调度），统一调度 3 个异构专业 Agent（代码生成、质量诊断、简历同步），通过 CLI Bridge 实现零侵入集成" |
+| 简历读起来像做了几个独立项目 | 简历体现系统架构能力和工程落地深度 |
+
+**工作原理**（自动，无需额外配置）：
+
+```
+1. generator.py 读取 <项目>/agent.yaml
+       ↓
+2. 发现 scheduled_agents 字段？
+       ↓ 是
+3. 构建层次上下文（子 Agent 名、角色、接口类型）
+       ↓
+4. 注入到 LLM 的生成 prompt 中
+       ↓
+5. LLM 产出体现调度架构的简历描述
+       ↓ 否
+6. 使用标准 prompt（无特殊处理）
+```
+
+**scheduled_agents 协议**（在项目的 agent.yaml 中声明）：
+
+```yaml
+# 示例：Agent Hub 的 agent.yaml
+name: agent-hub
+display_name: "Agent Hub Scheduler"
+protocol: internal
+
+scheduled_agents:
+  - name: omniagent
+    repo: D:/OmniAgent_CLI
+    role: "通用 AI 编程 Agent — 代码分析、生成、重构"
+    interface: cli
+  - name: smartbench
+    repo: D:/SmartBench
+    role: "代码质量诊断引擎"
+    interface: cli
+  - name: resume-sync
+    repo: D:/工作/resume-sync
+    role: "简历自动同步器"
+    interface: cli
+```
+
+> 💡 **设计原则**：`scheduled_agents` 是 Agent Manifest 协议的可选扩展字段。resume-sync 读取它但不要求它——如果项目的 `agent.yaml` 中没有此字段，生成流程照常进行，无任何影响。此功能对用户完全透明。与 [Agent Hub](https://github.com/xianyu-sheng/Agent-hub) 的调度系统天然配合。
 
 ---
 

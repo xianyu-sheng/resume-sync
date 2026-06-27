@@ -248,6 +248,60 @@ class Generator:
                 return "\n".join(text.split("\n")[:200])
         return ""
 
+    def _read_agent_yaml(self, repo_path: str) -> dict | None:
+        """Read agent.yaml from a project repo to discover scheduling relationships.
+
+        Returns the parsed YAML dict, or None if not found / unreadable.
+        """
+        agent_yaml_path = Path(repo_path) / "agent.yaml"
+        if not agent_yaml_path.exists():
+            return None
+        try:
+            with open(agent_yaml_path, "r", encoding="utf-8") as f:
+                return yaml.safe_load(f)
+        except Exception:
+            return None
+
+    def _build_hierarchy_context(self, agent_yaml: dict | None) -> str:
+        """Build context string describing sub-agent scheduling relationships.
+
+        When a project's agent.yaml declares ``scheduled_agents``, this method
+        returns Markdown that instructs the LLM to treat the project as an
+        orchestration / scheduling system rather than a standalone tool.
+        """
+        if not agent_yaml:
+            return ""
+        scheduled = agent_yaml.get("scheduled_agents", [])
+        if not scheduled:
+            return ""
+
+        parent_name = agent_yaml.get("display_name", agent_yaml.get("name", "本项目"))
+        protocol = agent_yaml.get("protocol", "cli")
+
+        lines = [
+            "",
+            "## 🏗️ 项目架构关系（重要：这是调度/编排系统）",
+            "",
+            f"**{parent_name}** 的协议类型为 `{protocol}`，它是一个**中央调度系统**，",
+            f"通过标准化的 Agent Manifest 协议调度以下 {len(scheduled)} 个专业 Agent 协同工作：",
+            "",
+        ]
+        for sa in scheduled:
+            lines.append(
+                f"- **{sa['name']}**（{sa.get('interface', 'cli')} bridge）：{sa.get('role', '')}"
+            )
+
+        lines.extend([
+            "",
+            "> ⚠️ **简历撰写指引——请严格遵循：**",
+            "> 1. 这个项目的核心价值是**系统架构能力**——设计了一套让多个异构 Agent 协同工作的调度框架",
+            "> 2. 简历条目必须突出：Agent Manifest 自描述协议（零侵入）、LLM 意图路由、DAG 并行调度、结果聚合",
+            "> 3. **不要**写成「做了 N 个 Agent」——要写成「设计了一套多 Agent 协同调度系统，统一调度 N 个专业 Agent」",
+            "> 4. 子 Agent（" + "、".join(sa['name'] for sa in scheduled) + "）各自有独立的简历条目，**此处只聚焦调度系统本身的架构贡献**",
+            "> 5. 体现技术深度：协议设计、并发控制、故障隔离、生命周期管理",
+        ])
+        return "\n".join(lines)
+
     def _call_llm(self, system: str, user: str,
                   temperature: float = 0.3,
                   max_tokens: int = 4000) -> str | None:
@@ -295,8 +349,16 @@ class Generator:
     # ── prompt builders ───────────────────────────────────────
 
     def _build_generate_prompt(self, project_name: str, current_bullets: str,
-                               diff: str, readme: str) -> str:
-        """Build the Round-1 generation prompt with 大厂 standards."""
+                               diff: str, readme: str,
+                               hierarchy_context: str = "") -> str:
+        """Build the Round-1 generation prompt with 大厂 standards.
+
+        Args:
+            hierarchy_context: Optional context about sub-agent scheduling
+                relationships (from agent.yaml's ``scheduled_agents``).
+                When non-empty, instructs the LLM to treat this project as
+                an orchestration system.
+        """
         return f"""以下是求职者简历中 "{project_name}" 项目的当前描述，以及该项目代码仓库的最新变更（git diff）。请根据代码变更更新简历描述。
 
 ## 当前简历中该项目的描述
@@ -307,6 +369,7 @@ class Generator:
 
 ## 项目 README（供参考上下文）
 {readme[:2000]}
+{hierarchy_context}
 
 ## 要求
 1. 分析代码变更的**业务含义和技术价值**——不要罗列文件变更，要提炼出对招聘方有吸引力的能力证明
@@ -419,10 +482,14 @@ class Generator:
         current_bullets = self._read_current_bullets(tex_path, project_key)
         readme = self._read_readme(repo_path)
 
+        # ── 读取 agent.yaml，发现调度/子项目关系 ──
+        agent_yaml = self._read_agent_yaml(repo_path)
+        hierarchy_context = self._build_hierarchy_context(agent_yaml)
+
         # ── Dry-run: return the Round-1 prompt ──
         if dry_run:
             prompt = self._build_generate_prompt(
-                project_name, current_bullets, diff, readme)
+                project_name, current_bullets, diff, readme, hierarchy_context)
             return {
                 "bullets": [], "summary": "", "requires_update": False,
                 "review_score": None, "review_rounds": 0,
@@ -431,7 +498,7 @@ class Generator:
 
         # ── Round 1: Generate ──────────────────────────────────
         gen_prompt = self._build_generate_prompt(
-            project_name, current_bullets, diff, readme)
+            project_name, current_bullets, diff, readme, hierarchy_context)
 
         try:
             content = self._call_llm(SYSTEM_GENERATOR, gen_prompt,

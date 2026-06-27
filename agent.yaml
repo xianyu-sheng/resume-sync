@@ -4,9 +4,13 @@
 name: resume-sync
 display_name: 简历同步器
 description: |
-  自动化简历维护工具。检测 Git 项目变更 → LLM 三阶段流水线（生成-审查-修订）
-  生成大厂风格(FAANG)简历要点 → 更新 LaTeX 源文件 → 编译 PDF。
-  支持 Windows 计划任务定时后台运行，主动推送变更通知。
+  自动化简历维护工具。检测 Git 项目变更 → 读取 agent.yaml 发现调度/子项目关系 →
+  LLM 三阶段流水线（生成-审查-修订）生成大厂风格(FAANG)简历要点 →
+  更新 LaTeX 源文件 → 编译 PDF。支持 Windows 计划任务定时后台运行，主动推送变更通知。
+
+  核心特色：自动读取项目的 agent.yaml，若发现 scheduled_agents 声明，
+  会在生成简历要点时注入子项目/调度关系上下文，使 LLM 能产出体现
+  系统架构层级的描述（例如"设计了一套多 Agent 协同调度系统"而非"做了 3 个 Agent"）。
 protocol: cli
 version: "1.0"
 
@@ -22,7 +26,10 @@ capabilities:
         has_changes: "bool"
 
     - name: plan
-      description: 基于 Git diff 通过 LLM 三阶段流水线生成简历要点（生成→自审→修订，评分阈值 9.0/10）
+      description: |
+        基于 Git diff 通过 LLM 三阶段流水线生成简历要点（生成→自审→修订，评分阈值 9.0/10）。
+        自动读取项目 agent.yaml 中的 scheduled_agents 声明，为调度系统类项目注入
+        子 Agent 关系上下文，使生成的简历体现多 Agent 协同架构而非独立工具列表。
       input:
         project: "string — 要生成要点的项目名"
       output:
