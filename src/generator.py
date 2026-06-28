@@ -9,6 +9,7 @@ Pipeline:  Generate (Round 1) → Review (Round 2) → Revise (Round 3)
 """
 
 import json
+import os
 import re
 import time
 from pathlib import Path
