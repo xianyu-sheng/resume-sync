@@ -128,7 +128,7 @@ class Updater:
         proposed_lines = []
         for bullet in new_bullets:
             # Ensure each bullet line starts with 4 spaces + \item
-            bullet = bullet.strip()
+            bullet = _sanitize_latex_bullet(bullet.strip())
             if not bullet.startswith("\\item"):
                 bullet = "\\item " + bullet
             proposed_lines.append(f"    {bullet}")
