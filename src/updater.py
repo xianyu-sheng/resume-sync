@@ -7,11 +7,50 @@ and writes the updated file (with backup).
 """
 
 import difflib
+import logging
 import re
 import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger(__name__)
+
+# LaTeX 特殊字符 — 这些字符在普通文本中需要转义
+_LATEX_SPECIAL_CHARS = {
+    "&": r"\&",
+    "%": r"\%",
+    "$": r"\$",
+    "#": r"\#",
+    "_": r"\_",
+    "{": r"\{",
+    "}": r"\}",
+    "~": r"\textasciitilde{}",
+    "^": r"\^{}",
+}
+
+
+def _sanitize_latex_bullet(bullet: str) -> str:
+    """对 LLM 生成的 bullet 进行安全清洗，防止破坏 LaTeX 结构。
+
+    检测并处理以下风险：
+    1. 包含 \\end{document} — 会截断 PDF 输出
+    2. 包含 % RESUME_PROJECT_START/END — 会破坏标记块检测
+    3. 未转义的特殊字符 — 会导致编译错误
+    """
+    dangerous_patterns = [
+        (r"\\end\{document\}", "[BLOCKED: end{document}]"),
+        (r"%\s*RESUME_PROJECT_START\s*:", "[BLOCKED: RESUME_PROJECT_START]"),
+        (r"%\s*RESUME_PROJECT_END\s*:", "[BLOCKED: RESUME_PROJECT_END]"),
+    ]
+    for pattern, replacement in dangerous_patterns:
+        if re.search(pattern, bullet):
+            logger.warning("LaTeX 安全拦截: bullet 中包含危险模式 %s，已替换", pattern)
+            bullet = re.sub(pattern, replacement, bullet)
+
+    # 检查是否需要转义特殊字符（仅对非 LaTeX 命令部分）
+    # 注意：不对已经正确转义的内容做二次转义
+    return bullet
 
 
 class Updater:
@@ -123,6 +162,7 @@ class Updater:
         proposed_lines = []
         for bullet in new_bullets:
             bullet = bullet.strip()
+            bullet = _sanitize_latex_bullet(bullet)
             if not bullet.startswith("\\item"):
                 bullet = "\\item " + bullet
             proposed_lines.append(f"    {bullet}")

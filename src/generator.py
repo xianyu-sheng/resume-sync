@@ -385,9 +385,20 @@ class Generator:
         llm_cfg = self.config.get("llm", {})
         api_key = llm_cfg.get("api_key", "")
         if api_key.startswith("${"):
-            import os
             env_var = api_key[2:-1]
             api_key = os.environ.get(env_var, "")
+            if not api_key:
+                raise ValueError(
+                    f"LLM API 密钥未设置。请设置环境变量 {env_var}，"
+                    f"例如在 PowerShell 中运行:\n"
+                    f'  $env:{env_var} = "your-api-key"'
+                )
+
+        if not api_key:
+            raise ValueError(
+                "LLM API 密钥未配置。请在 config.yaml 的 llm.api_key 中设置，"
+                "或使用 ${DEEPSEEK_API_KEY} 引用环境变量。"
+            )
 
         self.client = OpenAI(
             api_key=api_key,
@@ -510,9 +521,13 @@ class Generator:
         try:
             return json.loads(content)
         except json.JSONDecodeError:
-            match = re.search(r"\{.*\}", content, re.DOTALL)
+            # 使用非贪婪匹配避免合并多个 JSON 块
+            match = re.search(r"\{.*?\}", content, re.DOTALL)
             if match:
-                return json.loads(match.group(0))
+                try:
+                    return json.loads(match.group(0))
+                except json.JSONDecodeError:
+                    pass  # 回退匹配也失败，继续向外抛出原始错误
             raise
 
     def _format_bullets_display(self, bullets: list[str]) -> str:
@@ -749,7 +764,12 @@ class Generator:
                     temperature=0.2, max_tokens=3000)
                 review = self._parse_response(review_content)
             except Exception:
-                # If review fails, keep current bullets and exit loop
+                # 审查失败 — 保存警告并保留当前 bullet
+                result["warning"] = (
+                    f"审查轮次 {round_num} 失败 — "
+                    "返回未经完整审查的 bullet，建议人工审核"
+                )
+                result["review_incomplete"] = True
                 break
 
             review_score = review.get("overall_score", 0)
@@ -785,7 +805,12 @@ class Generator:
                 bullets = revised.get("bullets", bullets)
                 result = revised
             except Exception:
-                # If revise fails, keep previous bullets and exit loop
+                # 修订失败 — 保存警告并保留当前 bullet
+                result["warning"] = (
+                    f"修订轮次 {round_num} 失败 — "
+                    "返回未经完整修订的 bullet，建议人工审核"
+                )
+                result["revise_incomplete"] = True
                 break
 
             rounds_completed = round_num

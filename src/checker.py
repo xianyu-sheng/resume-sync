@@ -63,8 +63,11 @@ class Checker:
         return {"projects": {}, "initialized_at": None}
 
     def _save_state(self) -> None:
-        with open(self.state_path, "w", encoding="utf-8") as f:
+        """原子写入 state.json — 先写临时文件再 os.replace，防止崩溃损坏状态。"""
+        tmp_path = self.state_path.with_suffix(".tmp")
+        with open(tmp_path, "w", encoding="utf-8") as f:
             json.dump(self.state, f, indent=2, ensure_ascii=False)
+        os.replace(tmp_path, self.state_path)  # Windows/Linux 原子操作
 
     # ---- git helpers ----
 

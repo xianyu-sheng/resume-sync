@@ -27,7 +27,7 @@ capabilities:
 
     - name: plan
       description: |
-        基于 Git diff 通过 LLM 三阶段流水线生成简历要点（生成→自审→修订，评分阈值 9.0/10）。
+        基于 Git diff 通过 LLM 三阶段流水线生成简历要点（生成→自审→修订，评分阈值 8.5/10，润色阈值 9.0/10）。
         自动读取项目 agent.yaml 中的 scheduled_agents 声明，为调度系统类项目注入
         子 Agent 关系上下文，使生成的简历体现多 Agent 协同架构而非独立工具列表。
       input:
@@ -57,6 +57,15 @@ capabilities:
         pipeline_status: "dict"
         pdf_path: "string — 输出 PDF 路径"
 
+    - name: polish
+      description: |
+        润色已有简历要点的可读性和表达力（无需新提交）。重写现有 bullet points
+        使其更凝练、更有冲击力，使用强有力的动词开头。
+      input:
+        project: "string — 要润色的项目名（可选）"
+      output:
+        bullets: "list — [{text, score, keywords}]"
+
     - name: status
       description: 查看所有被追踪项目的当前状态（上次检查时间、是否有待处理变更）
       input: {}
@@ -68,4 +77,4 @@ capabilities:
     batch_mode_only: true
 
 interface:
-  command: cd D:/工作/resume-sync && python -m src.cli {task}
+  command: cd D:/工作/resume-sync && python -m src.cli {task} {project}
