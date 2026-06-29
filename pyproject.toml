@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "resume-sync"
+version = "0.1.0"
+description = "自动化简历维护工具。检测 Git 项目变更，LLM 三阶段流水线（生成-审查-修订）生成大厂风格简历要点，更新 LaTeX 源文件并编译 PDF。支持 Windows 计划任务定时后台运行。"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+authors = [
+    {name = "Xianyu Sheng"},
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Office/Business :: Scheduling",
+    "Topic :: Text Processing :: Markup :: LaTeX",
+]
+dependencies = [
+    "pyyaml>=6.0",
+    "openai>=1.0.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/xianyu-sheng/resume-sync"
+Repository = "https://github.com/xianyu-sheng/resume-sync"
+Issues = "https://github.com/xianyu-sheng/resume-sync/issues"
+
+[project.scripts]
+resume-sync = "src.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
