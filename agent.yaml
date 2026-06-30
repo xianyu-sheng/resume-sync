@@ -77,4 +77,4 @@ capabilities:
     batch_mode_only: true
 
 interface:
-  command: cd D:/工作/resume-sync && python -m src.cli {task} {project}
+  command: cd /home/xianyu-sheng/resume-sync && /home/xianyu-sheng/resume-sync/.venv/bin/python -m src.cli {task} {project}

@@ -3,21 +3,21 @@
 # ============================================================
 
 resume:
-  tex_path: "D:/工作/Agent开发简历_修改版_ (1)/main.tex"
-  pdf_output: "D:/工作/Agent开发简历_.pdf"
+  tex_path: "/home/xianyu-sheng/resume-sync/resume-tex/main.tex"
+  pdf_output: "/home/xianyu-sheng/resume-sync/output/Agent开发简历_.pdf"
 
 projects:
   - key: omniagent
     name: "OmniAgent"
-    repo_local: "D:/OmniAgent_CLI"
+    repo_local: "/home/xianyu-sheng/OmniAgent_CLI"
     enabled: true
   - key: smartbench
     name: "SmartBench"
-    repo_local: "D:/SmartBench"
+    repo_local: "/home/xianyu-sheng/SmartBench"
     enabled: true
   - key: agent-hub
     name: "Agent Hub"
-    repo_local: "D:/Agent-hub"
+    repo_local: "/home/xianyu-sheng/Agent-hub"
     enabled: true
 
 llm:
@@ -30,7 +30,7 @@ build:
   engine: "latexmk"
   args: ["-xelatex", "-interaction=nonstopmode"]
   backup: true
-  backup_dir: "D:/工作/resume-sync/backups"
+  backup_dir: "/home/xianyu-sheng/resume-sync/backups"
 
 review:
   enabled: true            # 多轮审查开关
