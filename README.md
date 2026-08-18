@@ -30,7 +30,8 @@ You commit code to your local project repo
        |
 [build]   latexmk -xelatex -> output PDF -> overwrite target file
        |
-[notify]  Windows Toast notification "Resume updated"
+[notify]  Windows Toast notification "Resume updated" (Windows only;
+          silently skipped on Linux/macOS)
 ```
 
 ### Polish Mode (No New Commits Required)
@@ -103,10 +104,14 @@ cd resume-sync
 
 # 2. Install Python dependencies
 pip install -r requirements.txt
+#    (or: pip install -e .  — also provides the `resume-sync` command)
 
-# 3. Set DeepSeek API Key (Windows)
+# 3. Set DeepSeek API Key
+# Windows (PowerShell):
 [Environment]::SetEnvironmentVariable('DEEPSEEK_API_KEY', 'sk-your-key', 'User')
-# Restart your terminal after setting the environment variable
+#   Restart your terminal after setting the environment variable
+# Linux/macOS:
+export DEEPSEEK_API_KEY=sk-your-key
 
 # 4. Edit config.yaml with your paths (see Configuration section below)
 
@@ -143,7 +148,7 @@ build:
   engine: "latexmk"
   args: ["-xelatex", "-interaction=nonstopmode"]
   backup: true
-  backup_dir: "backups"                # Relative to resume-sync project root
+  backup_dir: "backups"                # Absolute path also supported
 
 review:
   enabled: true                        # Enable multi-round self-review
@@ -172,6 +177,9 @@ Use the `${VARIABLE_NAME}` syntax in `config.yaml` to reference environment vari
 
 ```bash
 cd resume-sync
+
+# All commands below also work via the installed entry point:
+#   resume-sync status   (instead of: python -m src.cli status)
 
 # Show tracking status for all projects
 python -m src.cli status
@@ -204,7 +212,7 @@ python -m src.cli polish --apply       # Skip confirmation, apply directly
 ### Daemon Mode
 
 ```bash
-# Install Windows scheduled task (auto-starts on login, checks every 30 min)
+# Windows: install scheduled task (auto-starts on login, checks every 30 min)
 python -m src.cli install
 
 # Run one daemon check cycle (for scheduled task invocation)
@@ -213,15 +221,20 @@ python -m src.cli daemon
 # Continuous loop mode (Ctrl+C to stop)
 python src/daemon.py --loop
 
-# Remove scheduled task
+# Windows: remove scheduled task
 python -m src.cli uninstall
+
+# Linux: use cron instead of install/uninstall. Example crontab entry:
+#   */30 * * * * cd /path/to/resume-sync && /usr/bin/python3 -m src.cli daemon
+# See SETUP.md for the full Ubuntu step-by-step guide.
 ```
 
 ### Typical Daily Workflow
 
 ```bash
 # === Daily use ===
-# 1. Daemon detects new commits in background -> Windows notification pops up
+# 1. Daemon detects new commits in background
+#    (Windows: toast notification pops up; Linux/macOS: check `status` output)
 # 2. Open terminal
 python -m src.cli plan my-project
 # 3. Review LLM-generated bullets and diff
@@ -466,7 +479,12 @@ scheduled_agents:
 
 ### Q: DeepSeek API call fails?
 
-Run `echo $env:DEEPSEEK_API_KEY` to verify the environment variable is set correctly (should start with `sk-`). If using an old terminal window, close and reopen for `setx` to take effect. Ensure your DeepSeek account has sufficient balance.
+Verify the environment variable is set correctly (should start with `sk-`):
+
+- Windows PowerShell: `echo $env:DEEPSEEK_API_KEY`
+- Linux/macOS: `echo $DEEPSEEK_API_KEY`
+
+If using an old terminal window, close and reopen it for the variable to take effect. Ensure your DeepSeek account has sufficient balance.
 
 ### Q: PDF compilation fails with "fontspec.sty not found"?
 
@@ -494,7 +512,7 @@ llm:
 
 ### Q: Can I use macOS / Linux?
 
-Core features (check / plan / apply / build) work fully. Only Windows Toast notifications are unavailable (silently skipped, does not affect the pipeline). For the background daemon, use cron instead of Windows Task Scheduler.
+Core features (check / plan / apply / build) work fully. Only Windows Toast notifications are unavailable (silently skipped, does not affect the pipeline). For the background daemon, use cron instead of Windows Task Scheduler — see SETUP.md for a complete Ubuntu walkthrough.
 
 ### Q: The generated bullets don't read well?
 
@@ -508,4 +526,4 @@ Set `enabled: false` for that project in `config.yaml`. The tool will skip it en
 
 ## License
 
-MIT
+[MIT](LICENSE)
